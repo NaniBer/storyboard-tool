@@ -1,11 +1,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { App } from './App';
+import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <main>
-      <h1>Storyboard Tool</h1>
-      <p>Project setup is ready. Scene creation comes next.</p>
-    </main>
+    <App />
   </React.StrictMode>,
 );
