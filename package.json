@@ -1,0 +1,17 @@
+{
+  "name": "storyboard-tool",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm run dev -w @storyboard/api\" \"npm run dev -w @storyboard/web\"",
+    "build": "npm run build -w @storyboard/api && npm run build -w @storyboard/web",
+    "typecheck": "npm run typecheck -w @storyboard/api && npm run typecheck -w @storyboard/web"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "typescript": "^7.0.2"
+  }
+}
