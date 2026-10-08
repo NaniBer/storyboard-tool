@@ -77,6 +77,41 @@ test('rejects wrong credentials and unrecognized browser origins', async () => {
   assert.equal(wrongPassword.headers.get('set-cookie'), null);
 });
 
+test('temporary credentials are opt-in, use the normal login, and open the existing workspace', async () => {
+  const disabled = await fetch(`${baseUrl}/api/auth/options`);
+  assert.deepEqual(await disabled.json(), { temporaryLogin: null });
+
+  config.demoPassword = 'public test password';
+  try {
+    const options = await fetch(`${baseUrl}/api/auth/options`);
+    assert.deepEqual(await options.json(), { temporaryLogin: { username: 'owner', password: 'public test password' } });
+    const wrongOrigin = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST', headers: { origin: 'https://wrong.example', 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'owner', password: 'public test password' }),
+    });
+    assert.equal(wrongOrigin.status, 403);
+
+    const entry = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST', headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'owner', password: 'public test password' }),
+    });
+    assert.equal(entry.status, 200);
+    const identity = await entry.json() as { username: string; csrfToken: string };
+    assert.equal(identity.username, 'owner');
+    const cookie = (entry.headers.get('set-cookie') ?? '').split(';', 1)[0];
+    const scenes = await fetch(`${baseUrl}/api/scenes`, { headers: { cookie } });
+    assert.equal(scenes.status, 200);
+    assert.ok((await scenes.json() as Array<{ title: string }>).some((scene) => scene.title === 'Existing scene'));
+    const noCsrf = await fetch(`${baseUrl}/api/scenes`, {
+      method: 'POST', headers: { origin, cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Blocked' }),
+    });
+    assert.equal(noCsrf.status, 403);
+  } finally {
+    config.demoPassword = undefined;
+  }
+});
+
 test('keeps a session across restart, requires CSRF for changes, and revokes it on logout', async () => {
   const login = await fetch(`${baseUrl}/api/auth/login`, {
     method: 'POST', headers: { origin, 'content-type': 'application/json' },

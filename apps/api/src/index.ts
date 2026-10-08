@@ -8,7 +8,7 @@ import { authConfigFromEnv } from './auth.js';
 const envPath = fileURLToPath(new URL('../../../.env', import.meta.url));
 if (existsSync(envPath)) {
   const values = parseEnv(readFileSync(envPath, 'utf8'));
-  for (const name of ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'AUTH_USERNAME', 'AUTH_PASSWORD_HASH', 'AUTH_ALLOWED_ORIGIN', 'AUTH_COOKIE_SAME_SITE'] as const) {
+  for (const name of ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'AUTH_USERNAME', 'AUTH_PASSWORD_HASH', 'AUTH_ALLOWED_ORIGIN', 'AUTH_COOKIE_SAME_SITE', 'AUTH_DEMO_LOGIN', 'AUTH_DEMO_PASSWORD'] as const) {
     if (values[name] !== undefined) process.env[name] = values[name];
   }
 }

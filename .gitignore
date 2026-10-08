@@ -7,3 +7,7 @@ data/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Ehud Radar is maintained in its own Git repository.
+/ehud-radar/
+.vercel

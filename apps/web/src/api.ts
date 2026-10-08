@@ -2,6 +2,8 @@ export type Scene = {
   id: string;
   title: string;
   description: string;
+  position: number;
+  shotCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -34,8 +36,10 @@ export type ExportFormat = 'pdf' | 'txt' | 'json';
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 let csrfToken: string | null = null;
+let signedOut = false;
 
 export type AuthSession = { username: string; csrfToken: string };
+export type AuthOptions = { temporaryLogin: { username: string; password: string } | null };
 
 export function imageUrl(path: string): string {
   return `${baseUrl}${path.replace(/^\/api/, '')}`;
@@ -60,7 +64,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    if (response.status === 401 && !path.startsWith('/auth/')) {
+    if (response.status === 401 && !path.startsWith('/auth/') && !signedOut) {
       csrfToken = null;
       window.dispatchEvent(new Event('storyboard:session-expired'));
     }
@@ -78,9 +82,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const authApi = {
+  forgetSession(): void {
+    signedOut = true;
+    csrfToken = null;
+  },
+  options: () => request<AuthOptions>('/auth/options'),
   async me(): Promise<AuthSession> {
     const session = await request<AuthSession>('/auth/me');
     csrfToken = session.csrfToken;
+    signedOut = false;
     return session;
   },
   async login(username: string, password: string): Promise<AuthSession> {
@@ -89,16 +99,27 @@ export const authApi = {
       body: JSON.stringify({ username, password }),
     });
     csrfToken = session.csrfToken;
+    signedOut = false;
     return session;
   },
   async logout(): Promise<void> {
-    await request<void>('/auth/logout', { method: 'POST' });
-    csrfToken = null;
+    signedOut = true;
+    try {
+      await request<void>('/auth/logout', { method: 'POST' });
+      csrfToken = null;
+    } catch (error) {
+      signedOut = false;
+      throw error;
+    }
   },
 };
 
 export const sceneApi = {
   list: () => request<Scene[]>('/scenes'),
+  reorder: (ids: string[]) => request<Scene[]>('/scenes/order', {
+    method: 'PUT',
+    body: JSON.stringify({ ids }),
+  }),
   get: (id: string) => request<Scene>(`/scenes/${encodeURIComponent(id)}`),
   create: (title: string, description: string) =>
     request<Scene>('/scenes', {

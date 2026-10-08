@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #293c32;
+  --color-rust: #a3573c;
+  --color-paper: #f7f5f1;
+  --color-cream: #fbfaf7;
+  --color-muted: #605a53;
+  --color-subtle: #706b64;
+  --color-line: #e7e1da;
+  --color-soft-line: #eee9e3;
+}
+
+@layer base {
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif; color: #272523; background: #f7f5f1; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased }
+* { box-sizing: border-box }
+body { margin: 0; min-width: 320px }
+button { font: inherit }
+input { font: inherit }
+textarea { font: inherit }
+button { cursor: pointer }
+button:disabled { cursor: not-allowed }
+::selection { background: #dec4b8; color: #272523 }
+:focus-visible { outline: 3px solid #b46346; outline-offset: 3px }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important } }
+@media (prefers-reduced-motion: reduce) { *::before { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important } }
+@media (prefers-reduced-motion: reduce) { *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important } }
+}
+
+@keyframes flow-arrive { from { opacity: .68; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* React Flow ships unlayered CSS; keep these library-internal overrides unlayered too. */
+.flow-canvas .react-flow__pane,
+.scene-flow-canvas .react-flow__pane { @apply cursor-grab; }
+.flow-canvas .react-flow__pane:active,
+.scene-flow-canvas .react-flow__pane:active { @apply cursor-grabbing; }
+.flow-canvas .react-flow__node-shot { @apply w-[260px] rounded-[13px]; }
+.scene-flow-canvas .react-flow__node-scene { @apply w-[270px] rounded-[12px]; }
+.flow-canvas .react-flow__node-shot:focus-visible { outline: 3px solid #b46346; outline-offset: 5px; }
+.scene-flow-canvas .react-flow__node-scene:focus-visible { outline: 3px solid #a3573c; outline-offset: 5px; }
+.scene-flow-canvas .react-flow__node-scene.selected .scene-flow-card { outline: 2px solid #53745b; outline-offset: 2px; }
+.flow-canvas .react-flow__handle,
+.scene-flow-canvas .react-flow__handle { @apply size-[8px] border-0 bg-[#a66b4c]; }
+.flow-canvas .react-flow__controls,
+.scene-flow-canvas .react-flow__controls { @apply m-[16px] overflow-hidden rounded-[7px]; box-shadow: 0 5px 18px rgba(40, 35, 27, .15); }
+.flow-canvas .react-flow__controls-button,
+.scene-flow-canvas .react-flow__controls-button { @apply size-[30px] bg-white text-ink; border-bottom-color: #ece5dc; }
+.flow-canvas .react-flow__controls-button:hover,
+.scene-flow-canvas .react-flow__controls-button:hover { @apply bg-[#f3eee7]; }
+.scene-flow-canvas .react-flow__minimap { @apply overflow-hidden rounded-[6px] border border-[#dfd7cc]; }
+.shot-workspace .react-flow__node-shot.selected .flow-shot { box-shadow: 0 0 0 3px #a3573c, 0 18px 34px -20px rgba(41, 37, 30, .48); }
+.shot-workspace .react-flow__node-shot.selected .flow-shot-number { @apply bg-rust; }
+.shot-workspace .react-flow__minimap { @apply m-[14px] h-[78px] w-[130px] rounded-[7px] border border-[#ddd3c7] bg-white; }
+@media (max-width: 640px) { .scene-flow-canvas .react-flow__minimap { @apply hidden; } }

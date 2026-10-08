@@ -8,6 +8,8 @@ export type Scene = {
   id: string;
   title: string;
   description: string;
+  position: number;
+  shotCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -82,6 +84,8 @@ type SceneRow = {
   id: string;
   title: string;
   description: string;
+  position: number;
+  shot_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -91,6 +95,8 @@ function toScene(row: SceneRow): Scene {
     id: row.id,
     title: row.title,
     description: row.description,
+    position: row.position,
+    shotCount: row.shot_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -110,6 +116,7 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
       owner_id TEXT,
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -150,6 +157,20 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
     CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
   `);
 
+  // Existing databases predate scene ordering. Preserve their visible order on upgrade.
+  const sceneColumns = database.pragma('table_info(scenes)') as Array<{ name: string }>;
+  if (!sceneColumns.some((column) => column.name === 'position')) {
+    database.transaction(() => {
+      database.exec('ALTER TABLE scenes ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
+      const legacyScenes = database.prepare<[], { id: string }>(
+        'SELECT id FROM scenes ORDER BY updated_at DESC, id DESC',
+      ).all();
+      const setLegacyPosition = database.prepare('UPDATE scenes SET position = ? WHERE id = ?');
+      legacyScenes.forEach((scene, position) => setLegacyPosition.run(position, scene.id));
+    })();
+  }
+  database.exec('CREATE INDEX IF NOT EXISTS scenes_position_idx ON scenes(position, id)');
+
   const insertSession = database.prepare('INSERT INTO sessions (token_hash, csrf_token, expires_at) VALUES (?, ?, ?)');
   const selectSession = database.prepare<[string], { csrf_token: string; expires_at: number }>(
     'SELECT csrf_token, expires_at FROM sessions WHERE token_hash = ?',
@@ -158,14 +179,18 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
   const deleteExpiredSessions = database.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
   const selectScene = database.prepare<[string], SceneRow>(
-    'SELECT id, title, description, created_at, updated_at FROM scenes WHERE id = ?',
+    'SELECT id, title, description, position, created_at, updated_at, (SELECT COUNT(*) FROM shots WHERE scene_id = scenes.id) AS shot_count FROM scenes WHERE id = ?',
   );
   const listScenes = database.prepare<[], SceneRow>(
-    'SELECT id, title, description, created_at, updated_at FROM scenes ORDER BY updated_at DESC, id DESC',
+    'SELECT id, title, description, position, created_at, updated_at, (SELECT COUNT(*) FROM shots WHERE scene_id = scenes.id) AS shot_count FROM scenes ORDER BY position ASC, id ASC',
+  );
+  const nextScenePosition = database.prepare<[], { position: number }>(
+    'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM scenes',
   );
   const insertScene = database.prepare(
-    'INSERT INTO scenes (id, owner_id, title, description, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?)',
+    'INSERT INTO scenes (id, owner_id, title, description, position, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?)',
   );
+  const setScenePosition = database.prepare('UPDATE scenes SET position = ? WHERE id = ?');
   const updateScene = database.prepare(
     'UPDATE scenes SET title = ?, description = ?, updated_at = ? WHERE id = ?',
   );
@@ -236,10 +261,12 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
       return row ? toScene(row) : null;
     },
     create(title: string, description: string): Scene {
-      const id = randomUUID();
-      const now = new Date().toISOString();
-      insertScene.run(id, title, description, now, now);
-      return this.get(id)!;
+      return database.transaction(() => {
+        const id = randomUUID();
+        const now = new Date().toISOString();
+        insertScene.run(id, title, description, nextScenePosition.get()!.position, now, now);
+        return this.get(id)!;
+      })();
     },
     update(id: string, changes: { title?: string; description?: string }): Scene | null {
       const current = this.get(id);
@@ -247,6 +274,17 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
       const now = new Date().toISOString();
       updateScene.run(changes.title ?? current.title, changes.description ?? current.description, now, id);
       return this.get(id);
+    },
+    orderScenes(ids: string[]): Scene[] | null {
+      return database.transaction(() => {
+        const current = this.list();
+        const currentIds = new Set(current.map((scene) => scene.id));
+        if (ids.length !== current.length || new Set(ids).size !== ids.length || ids.some((id) => !currentIds.has(id))) {
+          return null;
+        }
+        ids.forEach((id, position) => setScenePosition.run(position, id));
+        return this.list();
+      })();
     },
     listShots(sceneId: string): Shot[] {
       return listShots.all(sceneId).map((row) => toShot(row, this.getCurrentImage(row.id)));

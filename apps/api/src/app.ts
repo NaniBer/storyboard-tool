@@ -18,6 +18,7 @@ const updateScene = z.object({ title: title.optional(), description: description
   (body) => body.title !== undefined || body.description !== undefined,
   { message: 'Provide a title or description' },
 );
+const orderScenes = z.object({ ids: z.array(z.string()) });
 const shotType = z.string().trim().max(80, 'Shot type must be 80 characters or fewer');
 const shotDescription = z.string().trim().max(2000, 'Description must be 2000 characters or fewer');
 const notes = z.string().trim().max(4000, 'Notes must be 4000 characters or fewer');
@@ -71,6 +72,20 @@ export function createApp(store: SceneStore, options: { auth: AuthConfig | null;
       return;
     }
     response.status(201).json(store.create(parsed.data.title, parsed.data.description ?? ''));
+  });
+
+  app.put('/api/scenes/order', (request, response) => {
+    const parsed = orderScenes.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: 'Provide all scene IDs in the requested order' });
+      return;
+    }
+    const scenes = store.orderScenes(parsed.data.ids);
+    if (!scenes) {
+      response.status(400).json({ error: 'Order must include every scene exactly once' });
+      return;
+    }
+    response.json(scenes);
   });
 
   app.get('/api/scenes/:id', (request, response) => {

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import type { Server } from 'node:http';
 import sharp from 'sharp';
+import Database from 'better-sqlite3';
 import { createApp } from './app.js';
 import { openSceneStore, type SceneStore } from './scenes.js';
 import { PromptGenerationError } from './prompt-generator.js';
@@ -94,6 +95,50 @@ test('keeps a scene after the database closes and reopens', () => {
   }
 });
 
+test('orders scenes through the API and keeps that order after reopening', async () => {
+  const first = store.create('First in story', '');
+  const second = store.create('Second in story', '');
+  const current = store.list();
+  const requested = [second.id, first.id, ...current.filter((scene) => scene.id !== first.id && scene.id !== second.id).map((scene) => scene.id)];
+  const response = await fetch(`${baseUrl}/api/scenes/order`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: requested }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).map((scene: { id: string }) => scene.id), requested);
+  assert.deepEqual(store.list().map((scene) => scene.position), requested.map((_, index) => index));
+
+  for (const ids of [[first.id], [first.id, first.id], [...requested, 'unknown']]) {
+    const invalid = await fetch(`${baseUrl}/api/scenes/order`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(store.list().map((scene) => scene.id), requested);
+  }
+  const reopened = openSceneStore(dataDir);
+  assert.deepEqual(reopened.list().map((scene) => scene.id), requested);
+  reopened.close();
+});
+
+test('upgrades an existing scene database without losing scene data or visible order', () => {
+  const legacyDir = mkdtempSync(join(tmpdir(), 'storyboard-legacy-scenes-'));
+  try {
+    const database = new Database(join(legacyDir, 'storyboard.sqlite'));
+    database.exec("CREATE TABLE scenes (id TEXT PRIMARY KEY, owner_id TEXT, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+    const insert = database.prepare('INSERT INTO scenes (id, owner_id, title, description, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?)');
+    insert.run('older', 'Older scene', 'Keep its description', '2026-01-01', '2026-01-01');
+    insert.run('newer', 'Newer scene', '', '2026-01-02', '2026-01-02');
+    database.close();
+
+    const upgraded = openSceneStore(legacyDir);
+    assert.deepEqual(upgraded.list().map((scene) => [scene.id, scene.position]), [['newer', 0], ['older', 1]]);
+    assert.equal(upgraded.get('older')?.description, 'Keep its description');
+    assert.equal(upgraded.create('Next scene', '').position, 2);
+    upgraded.close();
+  } finally {
+    rmSync(legacyDir, { recursive: true, force: true });
+  }
+});
+
 test('creates, edits, reorders, and deletes shots through the API', async () => {
   const sceneResponse = await fetch(`${baseUrl}/api/scenes`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -115,6 +160,7 @@ test('creates, edits, reorders, and deletes shots through the API', async () => 
   assert.equal(first.status, 'draft');
   assert.equal(first.notes, '');
   assert.equal(first.sceneId, scene.id);
+  assert.equal((await (await fetch(`${baseUrl}/api/scenes/${scene.id}`)).json()).shotCount, 2);
 
   const editedResponse = await fetch(`${baseUrl}/api/shots/${first.id}`, {
     method: 'PATCH', headers: { 'content-type': 'application/json' },

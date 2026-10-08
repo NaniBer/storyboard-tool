@@ -10,6 +10,7 @@ const loginWindowMs = 15 * 60 * 1000;
 export type AuthConfig = {
   username: string;
   passwordHash: string;
+  demoPassword?: string;
   allowedOrigin?: string;
   secureCookie: boolean;
   sameSite: 'lax' | 'none';
@@ -53,9 +54,14 @@ export function authConfigFromEnv(): AuthConfig {
   const sameSite = process.env.AUTH_COOKIE_SAME_SITE === 'none' ? 'none' : 'lax';
   const secureCookie = process.env.NODE_ENV === 'production';
   if (sameSite === 'none' && !secureCookie) throw new Error('SameSite=None requires HTTPS.');
+  const demoPassword = process.env.AUTH_DEMO_LOGIN === 'true' ? process.env.AUTH_DEMO_PASSWORD : undefined;
+  if (process.env.AUTH_DEMO_LOGIN === 'true' && (!demoPassword || demoPassword.length < 12)) {
+    throw new Error('Set AUTH_DEMO_PASSWORD to at least 12 characters when AUTH_DEMO_LOGIN=true.');
+  }
   return {
     username: process.env.AUTH_USERNAME?.trim() || 'ehudaiuser',
     passwordHash,
+    demoPassword,
     allowedOrigin: process.env.AUTH_ALLOWED_ORIGIN?.trim() || undefined,
     secureCookie,
     sameSite,
@@ -122,6 +128,20 @@ export function installAuth(app: Express, store: SceneStore, config: AuthConfig)
     next();
   }
 
+  function startSession(response: Response): void {
+    const token = randomBytes(32).toString('base64url');
+    const csrfToken = randomBytes(24).toString('base64url');
+    store.createSession(tokenHash(token), csrfToken, Date.now() + sessionLifetimeMs);
+    response.cookie(cookieName, token, { ...cookieOptions, maxAge: sessionLifetimeMs });
+    response.setHeader('Cache-Control', 'no-store');
+    response.json({ username: config.username, csrfToken });
+  }
+
+  app.get('/api/auth/options', (_request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
+    response.json({ temporaryLogin: config.demoPassword ? { username: config.username, password: config.demoPassword } : null });
+  });
+
   app.post('/api/auth/login', async (request, response) => {
     if (!checkOrigin(request, response)) return;
     const username = typeof request.body?.username === 'string' ? request.body.username.trim() : '';
@@ -137,7 +157,10 @@ export function installAuth(app: Express, store: SceneStore, config: AuthConfig)
       response.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
       return;
     }
-    const passwordMatches = await verifyPassword(password, config.passwordHash);
+    const passwordMatches = username === config.username && (
+      (config.demoPassword !== undefined && equalText(password, config.demoPassword))
+      || await verifyPassword(password, config.passwordHash)
+    );
     if (!passwordMatches || username !== config.username) {
       const count = failure && failure.until > Date.now() ? failure.count + 1 : 1;
       failedLogins.set(ip, { count, until: Date.now() + loginWindowMs });
@@ -145,12 +168,7 @@ export function installAuth(app: Express, store: SceneStore, config: AuthConfig)
       return;
     }
     failedLogins.delete(ip);
-    const token = randomBytes(32).toString('base64url');
-    const csrfToken = randomBytes(24).toString('base64url');
-    store.createSession(tokenHash(token), csrfToken, Date.now() + sessionLifetimeMs);
-    response.cookie(cookieName, token, { ...cookieOptions, maxAge: sessionLifetimeMs });
-    response.setHeader('Cache-Control', 'no-store');
-    response.json({ username: config.username, csrfToken });
+    startSession(response);
   });
 
   app.get('/api/auth/me', requireSession, (_request, response) => {
