@@ -39,7 +39,7 @@ try {
   const password = await hiddenPrompt('New storyboard password: ');
   const confirmation = await hiddenPrompt('Repeat password: ');
   if (password !== confirmation) throw new Error('Passwords did not match.');
-  stdout.write(`AUTH_PASSWORD_HASH=${await hashPassword(password)}\n`);
+  stdout.write(`AUTH_PASSWORD_HASH='${await hashPassword(password)}'\n`);
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : 'Could not create password hash.'}\n`);
   process.exitCode = 1;

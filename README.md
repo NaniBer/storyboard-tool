@@ -34,7 +34,7 @@ The API stores scene, shot, and image state in `data/storyboard.sqlite`, origina
 
 ## Run the API with Docker
 
-Docker Compose builds only the API and stores its SQLite database, image originals, and previews in the named `storyboard_data` volume. From the repository root:
+Docker Compose builds only the API and stores its SQLite database, image originals, and previews in the named `storyboard_data` volume. In `.env`, wrap the generated password hash in single quotes, for example `AUTH_PASSWORD_HASH='scrypt-v1$…$…'`, so Compose preserves its `$` characters. From the repository root:
 
 ```sh
 test -f .env || cp .env.example .env
