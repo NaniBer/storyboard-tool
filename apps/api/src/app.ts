@@ -9,6 +9,7 @@ import { createImageProcessor } from './image-processor.js';
 import { generateShotPrompt, PromptGenerationError, type PromptInput } from './prompt-generator.js';
 import { createPromptsText, createStoryboardJson, createStoryboardPdf, exportFilename, type ExportShot } from './exports.js';
 import type { SceneStore } from './scenes.js';
+import { installAuth, type AuthConfig } from './auth.js';
 
 const title = z.string().trim().min(1, 'Title is required').max(120, 'Title must be 120 characters or fewer');
 const description = z.string().trim().max(2000, 'Description must be 2000 characters or fewer');
@@ -37,7 +38,9 @@ const updateShot = z.object({
 }).refine((body) => Object.keys(body).length > 0, { message: 'Provide a shot field to update' });
 const orderShots = z.object({ ids: z.array(z.string()) });
 
-export function createApp(store: SceneStore, generatePrompt: (input: PromptInput) => Promise<string> = generateShotPrompt) {
+export function createApp(store: SceneStore, options: { auth: AuthConfig | null; generatePrompt?: (input: PromptInput) => Promise<string> }) {
+  if (!options.auth && process.env.NODE_ENV === 'production') throw new Error('Authentication is required in production.');
+  const generatePrompt = options.generatePrompt ?? generateShotPrompt;
   const app = express();
   const processor = createImageProcessor(store);
   const originalsDir = join(store.dataDir, 'originals');
@@ -54,6 +57,8 @@ export function createApp(store: SceneStore, generatePrompt: (input: PromptInput
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
   });
+
+  if (options.auth) installAuth(app, store, options.auth);
 
   app.get('/api/scenes', (_request, response) => {
     response.json(store.list());
@@ -260,7 +265,7 @@ export function createApp(store: SceneStore, generatePrompt: (input: PromptInput
       response.status(404).json({ error: 'Preview not found' });
       return;
     }
-    response.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    response.setHeader('Cache-Control', 'private, no-store');
     response.sendFile(join(store.dataDir, image.preview_path));
   });
 

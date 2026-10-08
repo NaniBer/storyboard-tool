@@ -33,6 +33,9 @@ export type ShotChanges = Partial<Pick<Shot, 'shotType' | 'description' | 'notes
 export type ExportFormat = 'pdf' | 'txt' | 'json';
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
+let csrfToken: string | null = null;
+
+export type AuthSession = { username: string; csrfToken: string };
 
 export function imageUrl(path: string): string {
   return `${baseUrl}${path.replace(/^\/api/, '')}`;
@@ -44,8 +47,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${baseUrl}${path}`, {
       ...init,
+      signal: init?.signal ?? AbortSignal.timeout(10_000),
+      credentials: 'include',
       headers: {
         ...(init?.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+        ...(!['GET', 'HEAD', 'OPTIONS'].includes(init?.method ?? 'GET') && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         ...init?.headers,
       },
     });
@@ -54,16 +60,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/auth/')) {
+      csrfToken = null;
+      window.dispatchEvent(new Event('storyboard:session-expired'));
+    }
     const payload: unknown = await response.json().catch(() => null);
     const message = payload && typeof payload === 'object' && 'error' in payload
       ? (payload as { error: unknown }).error
       : null;
-    throw new Error(typeof message === 'string' ? message : 'Something went wrong. Please try again.');
+    throw new Error(typeof message === 'string' ? message : response.status >= 500
+      ? 'The server is unavailable. Check that the API is running and try again.'
+      : 'Something went wrong. Please try again.');
   }
 
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
+
+export const authApi = {
+  async me(): Promise<AuthSession> {
+    const session = await request<AuthSession>('/auth/me');
+    csrfToken = session.csrfToken;
+    return session;
+  },
+  async login(username: string, password: string): Promise<AuthSession> {
+    const session = await request<AuthSession>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    csrfToken = session.csrfToken;
+    return session;
+  },
+  async logout(): Promise<void> {
+    await request<void>('/auth/logout', { method: 'POST' });
+    csrfToken = null;
+  },
+};
 
 export const sceneApi = {
   list: () => request<Scene[]>('/scenes'),

@@ -142,7 +142,20 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
       UNIQUE (shot_id, attempt)
     );
     CREATE INDEX IF NOT EXISTS shot_images_shot_attempt_idx ON shot_images(shot_id, attempt DESC);
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      csrf_token TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
   `);
+
+  const insertSession = database.prepare('INSERT INTO sessions (token_hash, csrf_token, expires_at) VALUES (?, ?, ?)');
+  const selectSession = database.prepare<[string], { csrf_token: string; expires_at: number }>(
+    'SELECT csrf_token, expires_at FROM sessions WHERE token_hash = ?',
+  );
+  const deleteSession = database.prepare('DELETE FROM sessions WHERE token_hash = ?');
+  const deleteExpiredSessions = database.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
   const selectScene = database.prepare<[string], SceneRow>(
     'SELECT id, title, description, created_at, updated_at FROM scenes WHERE id = ?',
@@ -199,6 +212,22 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
 
   return {
     dataDir,
+    createSession(tokenHash: string, csrfToken: string, expiresAt: number): void {
+      deleteExpiredSessions.run(Date.now());
+      insertSession.run(tokenHash, csrfToken, expiresAt);
+    },
+    getSession(tokenHash: string): { csrfToken: string; expiresAt: number } | null {
+      const session = selectSession.get(tokenHash);
+      if (!session) return null;
+      if (session.expires_at <= Date.now()) {
+        deleteSession.run(tokenHash);
+        return null;
+      }
+      return { csrfToken: session.csrf_token, expiresAt: session.expires_at };
+    },
+    deleteSession(tokenHash: string): void {
+      deleteSession.run(tokenHash);
+    },
     list(): Scene[] {
       return listScenes.all().map(toScene);
     },

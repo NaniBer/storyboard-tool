@@ -102,7 +102,7 @@ function SceneForm({ scene, busy, error, onSubmit }: SceneFormProps) {
   );
 }
 
-export function App() {
+export function App({ username, onSignOut, signingOut, signOutError }: { username: string; onSignOut: () => void; signingOut: boolean; signOutError: string | null }) {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -219,7 +219,7 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-foot">Your story starts one scene at a time.</div>
+        <div className="sidebar-foot"><span>Signed in as {username}</span><button className="sidebar-signout" type="button" onClick={onSignOut} disabled={signingOut}>{signingOut ? 'Signing out…' : 'Sign out'}</button>{signOutError && <p role="alert">{signOutError}</p>}</div>
       </aside>
 
       <main className="main-area">

@@ -17,7 +17,7 @@ let baseUrl: string;
 
 before(async () => {
   store = openSceneStore(dataDir);
-  server = createApp(store).listen(0, '127.0.0.1');
+  server = createApp(store, { auth: null }).listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Expected TCP server');
@@ -294,7 +294,7 @@ test('resumes an interrupted image job when the app restarts', async () => {
     connection.close();
 
     connection = openSceneStore(restartDir);
-    createApp(connection);
+    createApp(connection, { auth: null });
     for (let attempt = 0; attempt < 80 && connection.getImage(id)?.status !== 'ready'; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
@@ -317,10 +317,10 @@ test('generates and saves a shot prompt using the ready preview, returning the s
   connection.addImage(shot.id, { id: 'test-image', filename: 'frame.png', mimeType: 'image/png', originalPath: 'originals/test-image' });
   connection.setImageState('test-image', 'ready', null, 'previews/test.webp');
   let received: { sceneTitle: string; shotDescription: string; imagePath: string | null } | null = null;
-  const promptServer = createApp(connection, async (input) => {
+  const promptServer = createApp(connection, { auth: null, generatePrompt: async (input) => {
     received = { sceneTitle: input.scene.title, shotDescription: input.shot.description, imagePath: input.imagePath };
     return 'A close-up of the letter in soft afternoon light.';
-  }).listen(0, '127.0.0.1');
+  } }).listen(0, '127.0.0.1');
   try {
     await new Promise<void>((resolve) => promptServer.once('listening', resolve));
     const address = promptServer.address();
@@ -346,7 +346,7 @@ test('keeps the previous prompt when generation fails', async () => {
   const connection = openSceneStore(promptDir);
   const scene = connection.create('Scene', '');
   const shot = connection.createShot(scene.id, { shotType: 'Wide', description: '', notes: '', prompt: 'Keep this prompt' });
-  const promptServer = createApp(connection, async () => { throw new PromptGenerationError('OpenRouter is rate-limiting requests.', 429); }).listen(0, '127.0.0.1');
+  const promptServer = createApp(connection, { auth: null, generatePrompt: async () => { throw new PromptGenerationError('OpenRouter is rate-limiting requests.', 429); } }).listen(0, '127.0.0.1');
   try {
     await new Promise<void>((resolve) => promptServer.once('listening', resolve));
     const address = promptServer.address();
