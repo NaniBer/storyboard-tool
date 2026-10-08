@@ -25,4 +25,22 @@ The backend reads `.env` at startup. Restart `npm run dev` after adding or chang
 
 Vite forwards `/api` requests to the API on port 3001. Check `http://127.0.0.1:3001/api/health` to confirm the API is running. Run `npm test -w @storyboard/api` for the API tests.
 
-The API stores scene, shot, and image state in `data/storyboard.sqlite`, originals in `data/originals`, and generated previews in `data/previews` by default. Set `DATA_DIR` to use another directory. Interrupted image jobs resume when the API starts again. When Docker packaging is added, mount the entire data directory outside the container so the database and images survive deployments. For a separately hosted frontend, set `VITE_API_BASE_URL` to the API's `/api` URL at build time; cross-origin access will need to be configured before deployment.
+The API stores scene, shot, and image state in `data/storyboard.sqlite`, originals in `data/originals`, and generated previews in `data/previews` by default. Set `DATA_DIR` to use another directory. Interrupted image jobs resume when the API starts again.
+
+## Run the API with Docker
+
+Docker Compose builds only the API and stores its SQLite database, image originals, and previews in the named `storyboard_data` volume. From the repository root:
+
+```sh
+cp .env.example .env
+# Set OPENROUTER_API_KEY in .env if you want prompt generation.
+docker compose up -d --build
+docker compose ps
+curl http://127.0.0.1:3001/api/health
+```
+
+The API is bound to the host's `127.0.0.1:3001`; it is not publicly reachable. If that port is already used, set `API_HOST_PORT` when starting Compose, for example `API_HOST_PORT=3301 docker compose up -d --build`. `docker compose down` removes the container but keeps the volume. **Do not use `docker compose down -v` unless you intend to delete all saved scenes and images.** Keep a backup of the volume outside the VPS before replacing or moving the server. The real `.env`, local `data/`, and Git files are excluded from the Docker build context.
+
+The Docker volume starts empty. Existing scenes and images in a local `data/` directory are not copied into it automatically; migrate that whole directory separately if you want them on the server.
+
+For a separately hosted frontend, set `VITE_API_BASE_URL` to the public API's `/api` URL at build time; cross-origin access, HTTPS, and access control must be configured before making the API public.
