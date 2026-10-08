@@ -1,5 +1,9 @@
 FROM node:24-bookworm-slim AS build
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -8,7 +12,8 @@ RUN npm ci
 
 COPY apps/api/tsconfig.json apps/api/tsconfig.json
 COPY apps/api/src apps/api/src
-RUN npm run build -w @storyboard/api
+RUN npm run build -w @storyboard/api \
+    && npm prune --omit=dev
 
 FROM node:24-bookworm-slim
 
@@ -20,11 +25,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN npm ci --omit=dev --workspace=@storyboard/api \
-    && npm cache clean --force \
-    && mkdir -p /app/data \
-    && chown node:node /app/data
+RUN mkdir -p /app/data && chown node:node /app/data
 
+COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/api/dist apps/api/dist
 
 USER node
