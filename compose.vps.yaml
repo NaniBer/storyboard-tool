@@ -1,7 +1,8 @@
-# VPS overlay: runs the Storyboard API alongside the ehud-radar stack and lets
-# that stack's Caddy reach it by container name.
-# Usage (on the VPS, from the repo root):
-#   docker compose -f compose.vps.yaml --env-file .env up -d --build
+# Storyboard's own production stack — fully independent of ehud-radar.
+# The API is served directly on public port 8080 (plain HTTP). Browser-facing TLS is
+# provided by Vercel, which proxies storyboard-tool.vercel.app/api/* to this port.
+# (No Caddy: Let's Encrypt cannot issue certificates on non-standard ports, and radar
+#  owns 80/443. If storyboard later gets its own domain+80/443, add TLS here.)
 name: storyboard-vps
 
 services:
@@ -10,8 +11,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
-    # The API reads /app/.env itself (quote-safe parsing in index.ts), so mount it
-    # instead of using env_file (which would keep the quotes around AUTH_PASSWORD_HASH).
+    # API reads /app/.env itself (quote-safe parseEnv in index.ts) — mount, don't env_file.
     volumes:
       - ./.env:/app/.env:ro
       - storyboard_vps_data:/app/data
@@ -20,21 +20,13 @@ services:
       PORT: 3001
       DATA_DIR: /app/data
     ports:
-      - "127.0.0.1:3001:3001"
-    networks:
-      - radar_edge
-      - default
+      - "8080:3001"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-
-networks:
-  radar_edge:
-    external: true
-    name: edge-proxy_default
 
 volumes:
   storyboard_vps_data:

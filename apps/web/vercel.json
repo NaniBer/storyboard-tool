@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://storyboard.45-13-237-249.sslip.io/api/:path*"
+      "destination": "http://45-13-237-249.sslip.io:8080/api/:path*"
     }
   ]
 }
