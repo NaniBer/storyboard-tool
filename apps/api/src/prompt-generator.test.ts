@@ -27,7 +27,7 @@ test('sends shot details and the local preview to OpenRouter without a public im
     assert.equal(result, 'A cinematic close-up of a letter on a café table.');
     assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
     assert.equal((headers as Headers | null)?.get('authorization'), 'Bearer test-key');
-    assert.equal(body.model, 'openrouter/free');
+    assert.equal(body.model, 'google/gemma-4-26b-a4b-it:free');
     assert.match(body.messages[1].content[0].text, /A letter on the table/);
     assert.match(body.messages[1].content[1].image_url.url, /^data:image\/webp;base64,/);
   } finally {
@@ -42,6 +42,17 @@ test('explains a missing key and provider rate limit', async () => {
   );
   await assert.rejects(
     generateShotPrompt({ scene, shot, imagePath: null }, { apiKey: 'test-key', fetchImpl: (async () => new Response('{}', { status: 429 })) as typeof fetch }),
-    (error: unknown) => error instanceof PromptGenerationError && error.status === 429,
+    (error: unknown) => error instanceof PromptGenerationError,
+  );
+  await assert.rejects(
+    generateShotPrompt(
+      { scene, shot, imagePath: null },
+      {
+        apiKey: 'test-key',
+        model: 'broken-a:free,broken-b:free',
+        fetchImpl: (async () => new Response('{}', { status: 429 })) as typeof fetch,
+      },
+    ),
+    (error: unknown) => error instanceof PromptGenerationError && error.status === 502 && /broken-b/.test(error.message),
   );
 });
