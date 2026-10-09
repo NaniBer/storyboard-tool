@@ -352,16 +352,12 @@ test('resumes an interrupted image job when the app restarts', async () => {
   }
 });
 
-test('generates and saves a shot prompt using the ready preview, returning the shot to draft', async () => {
+test('generates and saves a shot prompt from the shot details only, returning the shot to draft', async () => {
   const promptDir = mkdtempSync(join(tmpdir(), 'storyboard-prompt-'));
   const connection = openSceneStore(promptDir);
   const scene = connection.create('The letter outside the café', 'A windy afternoon');
   const shot = connection.createShot(scene.id, { shotType: 'Close-up', description: 'A letter on the table', notes: 'Soft light', prompt: 'Old prompt' });
   connection.updateShot(shot.id, { status: 'approved' });
-  mkdirSync(join(promptDir, 'previews'), { recursive: true });
-  writeFileSync(join(promptDir, 'previews', 'test.webp'), 'preview');
-  connection.addImage(shot.id, { id: 'test-image', filename: 'frame.png', mimeType: 'image/png', originalPath: 'originals/test-image' });
-  connection.setImageState('test-image', 'ready', null, 'previews/test.webp');
   let received: { sceneTitle: string; shotDescription: string; imagePath: string | null } | null = null;
   const promptServer = createApp(connection, { auth: null, generatePrompt: async (input) => {
     received = { sceneTitle: input.scene.title, shotDescription: input.shot.description, imagePath: input.imagePath };
@@ -377,7 +373,7 @@ test('generates and saves a shot prompt using the ready preview, returning the s
     const generated = await response.json();
     assert.equal(generated.prompt, 'A close-up of the letter in soft afternoon light.');
     assert.equal(generated.status, 'draft');
-    assert.deepEqual(received, { sceneTitle: scene.title, shotDescription: shot.description, imagePath: join(promptDir, 'previews', 'test.webp') });
+    assert.deepEqual(received, { sceneTitle: scene.title, shotDescription: shot.description, imagePath: null });
     assert.equal(connection.getShot(shot.id)?.prompt, generated.prompt);
     assert.equal((await fetch(`${base}/api/shots/missing/generate-prompt`, { method: 'POST' })).status, 404);
   } finally {

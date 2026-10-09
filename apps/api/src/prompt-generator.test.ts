@@ -9,11 +9,9 @@ import type { Scene, Shot } from './scenes.js';
 const scene = { id: 'scene', title: 'The letter outside the café', description: 'Windy afternoon' } as Scene;
 const shot = { id: 'shot', sceneId: 'scene', shotType: 'Close-up', description: 'A letter on the table', notes: 'Soft light' } as Shot;
 
-test('sends shot details and the local preview to OpenRouter without a public image URL', async () => {
+test('sends shot details to OpenRouter as text only', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'storyboard-openrouter-'));
   try {
-    const imagePath = join(dir, 'preview.webp');
-    writeFileSync(imagePath, 'image bytes');
     let url = '';
     let headers: Headers | null = null;
     let body: any;
@@ -23,13 +21,12 @@ test('sends shot details and the local preview to OpenRouter without a public im
       body = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({ choices: [{ message: { content: 'A cinematic close-up of a letter on a café table.' } }] }), { status: 200 });
     };
-    const result = await generateShotPrompt({ scene, shot, imagePath }, { apiKey: 'test-key', fetchImpl: fetchImpl as typeof fetch });
+    const result = await generateShotPrompt({ scene, shot, imagePath: null }, { apiKey: 'test-key', fetchImpl: fetchImpl as typeof fetch });
     assert.equal(result, 'A cinematic close-up of a letter on a café table.');
     assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
     assert.equal((headers as Headers | null)?.get('authorization'), 'Bearer test-key');
-    assert.equal(body.model, 'google/gemma-4-26b-a4b-it:free');
+    assert.equal(body.model, 'nvidia/nemotron-3-super-120b-a12b:free');
     assert.match(body.messages[1].content[0].text, /A letter on the table/);
-    assert.match(body.messages[1].content[1].image_url.url, /^data:image\/webp;base64,/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

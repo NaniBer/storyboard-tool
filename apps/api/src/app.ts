@@ -209,9 +209,8 @@ export function createApp(store: SceneStore, options: { auth: AuthConfig | null;
       return;
     }
     const scene = store.get(shot.sceneId)!;
-    const image = store.getLatestReadyImage(shot.id);
     try {
-      const text = await generatePrompt({ scene, shot, imagePath: image?.preview_path ? join(store.dataDir, image.preview_path) : null });
+      const text = await generatePrompt({ scene, shot, imagePath: null });
       if (!text.trim()) throw new PromptGenerationError('OpenRouter returned an empty prompt. Try again.', 502);
       const updated = store.updateShot(shot.id, { prompt: text.trim().slice(0, 4000), status: 'draft' });
       if (!updated) {

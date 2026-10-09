@@ -29,7 +29,7 @@ function parseModels(value: string | undefined, fallback: string): string[] {
 
 export async function generateShotPrompt(
   { scene, shot, imagePath }: PromptInput,
-  { apiKey = process.env.OPENROUTER_API_KEY, model = process.env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free', fetchImpl = fetch }: Options = {},
+  { apiKey = process.env.OPENROUTER_API_KEY, model = process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-super-120b-a12b:free', fetchImpl = fetch }: Options = {},
 ): Promise<string> {
   if (!apiKey) {
     throw new PromptGenerationError('Add OPENROUTER_API_KEY to the server .env file, then try again.', 503);
@@ -105,7 +105,7 @@ export async function generateShotPrompt(
     return generated.slice(0, 4000);
   }
 
-  const models = parseModels(model, 'google/gemma-4-26b-a4b-it:free');
+  const models = parseModels(model, 'nvidia/nemotron-3-super-120b-a12b:free');
   let lastError: PromptGenerationError | null = null;
   for (const candidate of models) {
     try {
