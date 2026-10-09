@@ -34,7 +34,7 @@ services:
 networks:
   radar_edge:
     external: true
-    name: ehud-radar_default
+    name: edge-proxy_default
 
 volumes:
   storyboard_vps_data:
