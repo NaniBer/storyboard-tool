@@ -44,11 +44,15 @@ type SceneFormProps = {
   busy: boolean;
   error: string | null;
   onSubmit: (title: string, description: string) => Promise<void>;
+  onRemove?: () => Promise<void>;
 };
 
-function SceneForm({ scene, busy, error, onSubmit }: SceneFormProps) {
+function SceneForm({ scene, busy, error, onSubmit, onRemove }: SceneFormProps) {
   const [title, setTitle] = useState(scene?.title ?? '');
   const [description, setDescription] = useState(scene?.description ?? '');
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const dirty = scene ? title !== scene.title || description !== scene.description : Boolean(title.trim() || description.trim());
 
   useEffect(() => {
@@ -57,6 +61,18 @@ function SceneForm({ scene, busy, error, onSubmit }: SceneFormProps) {
       setDescription(scene.description);
     }
   }, [scene?.updatedAt]);
+
+  async function remove() {
+    if (!onRemove || removing) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await onRemove();
+    } catch (error) {
+      setRemoveError(error instanceof Error ? error.message : 'Could not remove this scene. Please try again.');
+      setRemoving(false);
+    }
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,6 +110,25 @@ function SceneForm({ scene, busy, error, onSubmit }: SceneFormProps) {
         />
       </div>
       {error && <div className={"notice mt-[23px] p-[12px_14px] rounded-[6px] text-[12px] leading-[1.5] [&.error]:text-[#7d2e24] [&.error]:bg-[#f9eae7] error"} role="alert">{error}</div>}
+      {scene && onRemove && (
+        <div className={"remove-scene mt-[23px] rounded-[6px] p-[15px] text-[12px] bg-[#f9eae7] [&_p]:m-0 [&_p]:text-[#6f3028] [&_p]:leading-[1.5] [&_button]:font-bold"} aria-label={`Remove scene ${scene.title}`}>
+          {confirmRemove ? (
+            <div className="flex items-center justify-between gap-[14px] max-[520px]:flex-col max-[520px]:items-stretch">
+              <p><strong>Remove “{scene.title}”</strong> and its {scene.shotCount === 1 ? 'shot' : `${scene.shotCount} shots`}? This can’t be undone.</p>
+              <span className="flex gap-[9px] flex-none max-[520px]:justify-end">
+                <button className={"rounded-[5px] bg-[#8f3f33] p-[8px_12px] text-white [transition:background_.18s_ease] [&:hover]:bg-[#703026] [&:disabled]:opacity-50"} type="button" onClick={() => void remove()} disabled={removing}>{removing ? 'Removing…' : 'Yes, remove scene'}</button>
+                <button className={"rounded-[5px] border-0 p-[8px_12px] bg-transparent text-[#6f3028] underline [text-underline-offset:3px] [&:hover]:text-[#4f231d] [&:disabled]:opacity-50"} type="button" onClick={() => setConfirmRemove(false)} disabled={removing}>Cancel</button>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-[14px] max-[520px]:flex-col max-[520px]:items-stretch">
+              <p>Scenes removed here are gone for good, including every shot.</p>
+              <button className={"quiet-button p-[9px_10px] border-0 rounded-[5px] bg-transparent text-[#a34d3d] text-[12px] font-semibold [transition:background_.18s_ease,_color_.18s_ease] [&:hover]:text-[#81372c] [&:hover]:bg-[#f3ded8] [&:disabled]:opacity-[.4]"} type="button" onClick={() => setConfirmRemove(true)} disabled={removing} aria-expanded={confirmRemove}>Remove scene</button>
+            </div>
+          )}
+          {removeError && <p role="alert" className="mt-[9px]">{removeError}</p>}
+        </div>
+      )}
       <div className={"form-footer flex items-center justify-between gap-[20px] mt-[35px] pt-[25px] [border-top:1px_solid_#eee9e3] [&_p]:m-0 [&_p]:text-subtle [&_p]:text-[12px] [&_p]:leading-[1.5] max-[520px]:items-stretch max-[520px]:flex-col max-[520px]:gap-[16px]"}>
         <p>{scene ? (dirty ? 'Unsaved changes' : `Last saved ${formattedDate(scene.updatedAt)}`) : 'You can add shots after creating the scene.'}</p>
         <button className={"primary-button inline-flex items-center justify-center gap-[13px] min-h-[43px] p-[10px_16px] [border:1px_solid_#293c32] rounded-[6px] text-[#fff] bg-ink text-[12px] font-bold whitespace-nowrap transition-[background,transform] duration-[180ms] [&:hover:not(:disabled)]:bg-[#3f5849] [&:hover:not(:disabled)]:[transform:translateY(-1px)] [&:disabled]:opacity-[.5] [&_svg]:w-[17px] [&_svg]:h-[17px] max-[520px]:[align-self:flex-start]"} type="submit" disabled={busy || !title.trim() || Boolean(scene && !dirty)}>
@@ -228,6 +263,22 @@ export function App({ username, onSignOut, signingOut, signOutError }: { usernam
     }
   }
 
+  async function removeScene() {
+    if (!selectedScene) return;
+    setSaving(true);
+    try {
+      await sceneApi.remove(selectedScene.id);
+      setScenes((previous) => sortScenes(previous.filter((scene) => scene.id !== selectedScene.id)));
+      setEditingScene(false);
+      setSaveError(null);
+      setListError(null);
+      selectScene(null);
+      setReloadKey((value) => value + 1);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className={"app-shell grid [grid-template-columns:280px_minmax(0,_1fr)] min-h-[100vh] max-[760px]:block"}>
       <aside className={"sidebar flex flex-col min-h-[100vh] p-[27px_18px_20px] text-soft-line bg-[#252927] max-[760px]:min-h-[auto] max-[760px]:p-[15px_16px_12px] max-[760px]:relative"} aria-label="Scenes">
@@ -264,7 +315,7 @@ export function App({ username, onSignOut, signingOut, signOutError }: { usernam
           {selectedId && !sceneLoading && selectedScene && (
             <section className={"editor scene-workspace [&_.shots-section]:mt-[20px]"} aria-labelledby="editor-heading">
               <div className={"workspace-heading flex items-end justify-between gap-[24px] mb-[22px] [&_h1]:m-0 [&_h1]:text-ink [&_h1]:[font-family:Georgia,_'Times_New_Roman',_serif] [&_h1]:text-[clamp(34px,_3vw,_48px)] [&_h1]:font-normal [&_h1]:tracking-[-.025em] [&_h1]:leading-[1.15] [&_h1]:[overflow-wrap:anywhere] [&_p]:max-w-[66ch] [&_p]:m-[10px_0_0] [&_p]:text-muted [&_p]:text-[13px] [&_p]:leading-[1.55] [&_.primary-button]:flex-none [&_.secondary-button]:flex-none max-[760px]:items-start max-[760px]:flex-col max-[760px]:gap-[17px] max-[760px]:[&_h1]:text-[35px]"}><div><button className={"workspace-back inline-flex m-[0_0_15px] p-[3px_0] border-0 text-[#925036] bg-transparent text-[12px] font-bold [&:hover]:text-[#603a28] [&:hover]:underline [&:hover]:[text-underline-offset:3px]"} type="button" onClick={() => selectScene(null)}>← All scenes</button><h1 id="editor-heading">{selectedScene.title}</h1><p>{selectedScene.description || 'Build the sequence for this scene.'}</p></div><button className={"secondary-button p-[10px_16px] [border:1px_solid_#293c32] rounded-[6px] text-ink bg-transparent text-[12px] font-bold [&:hover]:bg-[#ecf0eb]"} type="button" onClick={() => setEditingScene((value) => !value)} aria-expanded={editingScene} aria-controls="scene-details-panel">{editingScene ? 'Close scene details' : 'Edit scene details'}</button></div>
-              {editingScene && <div className={"editor-panel p-[clamp(28px,_4.8vw,_55px)] bg-[#fff] [border:1px_solid_#e7e1da] rounded-[12px] shadow-[0_12px_28px_-20px_rgba(48,_35,_24,_.27)] max-[520px]:p-[24px_20px] scene-details-panel max-w-[860px] mb-[25px]"} id="scene-details-panel"><SceneForm key={selectedScene.id} scene={selectedScene} busy={saving} error={saveError} onSubmit={updateScene} /></div>}
+              {editingScene && <div className={"editor-panel p-[clamp(28px,_4.8vw,_55px)] bg-[#fff] [border:1px_solid_#e7e1da] rounded-[12px] shadow-[0_12px_28px_-20px_rgba(48,_35,_24,_.27)] max-[520px]:p-[24px_20px] scene-details-panel max-w-[860px] mb-[25px]"} id="scene-details-panel"><SceneForm key={selectedScene.id} scene={selectedScene} busy={saving} error={saveError} onSubmit={updateScene} onRemove={removeScene} /></div>}
               <Shots key={selectedScene.id} sceneId={selectedScene.id} onDirtyChange={setShotDirty} />
             </section>
           )}

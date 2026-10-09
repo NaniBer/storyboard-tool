@@ -131,6 +131,7 @@ export const sceneApi = {
       method: 'PATCH',
       body: JSON.stringify({ title, description }),
     }),
+  remove: (id: string) => request<void>(`/scenes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   exportUrl: (id: string, format: ExportFormat) => `${baseUrl}/scenes/${encodeURIComponent(id)}/export/${format}`,
 };
 

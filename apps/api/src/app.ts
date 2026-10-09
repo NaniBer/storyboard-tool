@@ -147,6 +147,19 @@ export function createApp(store: SceneStore, options: { auth: AuthConfig | null;
     response.json(scene);
   });
 
+  app.delete('/api/scenes/:id', async (request, response) => {
+    const sceneId = String(request.params.id);
+    const imagePaths = store.deleteScene(sceneId);
+    if (!imagePaths) {
+      response.status(404).json({ error: 'Scene not found' });
+      return;
+    }
+    await Promise.all(imagePaths.map((path) => rm(join(store.dataDir, path), { force: true }).catch((error: unknown) => {
+      console.error('Could not remove scene image file:', error);
+    })));
+    response.status(204).end();
+  });
+
   app.get('/api/scenes/:sceneId/shots', (request, response) => {
     const sceneId = String(request.params.sceneId);
     if (!store.get(sceneId)) {

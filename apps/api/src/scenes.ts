@@ -209,6 +209,9 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
   const setShotPosition = database.prepare('UPDATE shots SET position = ?, updated_at = ? WHERE id = ?');
   const deleteShot = database.prepare('DELETE FROM shots WHERE id = ?');
   const closeShotGaps = database.prepare('UPDATE shots SET position = position - 1 WHERE scene_id = ? AND position > ?');
+  const deleteScene = database.prepare('DELETE FROM scenes WHERE id = ?');
+  const closeSceneGaps = database.prepare('UPDATE scenes SET position = position - 1 WHERE position > ?');
+  const sceneShots = database.prepare<[string], { id: string }>('SELECT id FROM shots WHERE scene_id = ?');
   const latestImage = database.prepare<[string], StoredImage>(
     'SELECT * FROM shot_images WHERE shot_id = ? ORDER BY attempt DESC LIMIT 1',
   );
@@ -370,6 +373,17 @@ export function openSceneStore(dataDir = process.env.DATA_DIR || defaultDataDir)
         deleteShot.run(id);
         closeShotGaps.run(shot.sceneId, shot.position);
         return true;
+      })();
+    },
+    deleteScene(id: string): string[] | null {
+      return database.transaction(() => {
+        const scene = this.get(id);
+        if (!scene) return null;
+        const imagePaths = listShots.all(id)
+          .flatMap((shot) => this.imageFilesForShot(shot.id));
+        deleteScene.run(id);
+        closeSceneGaps.run(scene.position);
+        return imagePaths;
       })();
     },
     close() {
