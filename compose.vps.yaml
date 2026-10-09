@@ -1,0 +1,40 @@
+# VPS overlay: runs the Storyboard API alongside the ehud-radar stack and lets
+# that stack's Caddy reach it by container name.
+# Usage (on the VPS, from the repo root):
+#   docker compose -f compose.vps.yaml --env-file .env up -d --build
+name: storyboard-vps
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    # The API reads /app/.env itself (quote-safe parsing in index.ts), so mount it
+    # instead of using env_file (which would keep the quotes around AUTH_PASSWORD_HASH).
+    volumes:
+      - ./.env:/app/.env:ro
+      - storyboard_vps_data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - radar_edge
+      - default
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  radar_edge:
+    external: true
+    name: ehud-radar_default
+
+volumes:
+  storyboard_vps_data:
